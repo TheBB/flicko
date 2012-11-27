@@ -100,8 +100,7 @@ def update(player, opps, W, L):
 
     x = opt.fmin_bfgs(logL, x, fprime=DlogL, disp=True)
     print(x)
-    #print(D2logL(x))
-    #print(linalg.det(D2logL(x)))
+    print(logL(x))
 
 p = Player()
 p.rating = 0
@@ -127,13 +126,5 @@ q.dev = 1
 q.cat_dev = [1, 1, 1]
 q.cat = 1
 opps += [q]
-
-#q = Player()
-#q.rating = 10
-#q.cat_rating = [0, 0, 0]
-#q.dev = 1
-#q.cat_dev = [1, 1, 1]
-#q.cat = 1
-#opps += [q]
 
 update(p, opps, [3, 3], [1, 3])
