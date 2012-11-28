@@ -17,7 +17,6 @@ def update_noplay(player):
     pass
 
 def update(player, opps, W, L):
-
     if len(opps) == 0:
         update_noplay(player)
 
@@ -29,6 +28,27 @@ def update(player, opps, W, L):
             tot_catrating += player.cat_rating[opps[j].cat]
 
     N = len(categories)
+    categories.sort()
+
+    win_cat = [0] * N
+    loss_cat = [0] * N
+    for j in range(0,len(opps)):
+        win_cat[categories.index(opps[j].cat)] += W[j]
+        loss_cat[categories.index(opps[j].cat)] += L[j]
+    for c in categories:
+        if win_cat[c] == 0 or loss_cat[c] == 0:
+            ind = -1
+            gap = -1
+            for j in range(0,len(opps)):
+                if opps[j].cat != categories[c]:
+                    continue
+                temp = abs(player.rating - opps[j].rating + player.cat_rating[opps[j].cat]\
+                           - opps[j].cat_rating[player.cat])
+                if temp < gap or gap == -1:
+                    gap = temp
+                    ind = j
+            W[ind] += 1
+            L[ind] += 1
 
     mu = zeros(len(opps))
     s = zeros(len(opps))
@@ -117,6 +137,11 @@ def update(player, opps, W, L):
     gen_dev = dev[0]
     cat_dev = dev[1:]
 
+    #print(gen_mod)
+    #print(gen_dev)
+    #print(cat_mod)
+    #print(cat_dev)
+
     player.new_dev = sqrt(1/(1/player.dev**2 + 1/gen_dev**2))
     player.new_rating = (player.rating/player.dev**2 + gen_mod/gen_dev**2) *\
             player.new_dev**2
@@ -162,21 +187,21 @@ q.cat_dev = [1, 1, 1]
 q.cat = 1
 opps += [q]
 
-q = Player()
-q.rating = 0
-q.cat_rating = [0, 0, 0]
-q.dev = 1
-q.cat_dev = [1, 1, 1]
-q.cat = 2
-opps += [q]
+#q = Player()
+#q.rating = 0
+#q.cat_rating = [0, 0, 0]
+#q.dev = 1
+#q.cat_dev = [1, 1, 1]
+#q.cat = 2
+#opps += [q]
 
 t = time.clock()
-for i in range(0,300):
-    update(p, opps, [3, 3, 3], [1, 3, 3])
+for i in range(0,1):
+    update(p, opps, [1, 1, 3], [0, 1, 3])
 t = time.clock() - t
-print('{t:.2f}'.format(t=t))
+#print('{t:.2f}'.format(t=t))
 
-#print(p.new_rating)
-#print(p.new_cat_rating)
-#print(p.new_dev)
-#print(p.new_cat_dev)
+print(p.new_rating)
+print(p.new_cat_rating)
+print(p.new_dev)
+print(p.new_cat_dev)
