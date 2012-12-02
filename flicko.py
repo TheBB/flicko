@@ -4,204 +4,188 @@ import time
 
 from numpy import *
 from scipy.stats import norm
-from math import log
 import scipy.optimize as opt
 
-class Player:
-    pass
+_var_decay = 0.
+_min_dev = 0.1
+_project = True
 
-def new_dev(old_dev):
-    return old_dev
+def check_max(func, x, i, name, disp):
+    try:
+        ret = func(x)
+        if ret[i] == 0:
+            return ret[0]
+        if disp:
+            print('OPT.' + name + ': did not converge')
+    except Exception as e:
+        if disp:
+            print('OPT.' + name + ': ' + str(e))
+    return None
 
-def update_noplay(player):
-    pass
+def maximize(L, DL, D2L, x, method=None, disp=False):
+    mL = lambda x: -L(x)
+    mDL = lambda x: -DL(x)
+    mD2L = lambda x: -D2L(x)
 
-def update(player, opps, W, L):
-    if len(opps) == 0:
-        update_noplay(player)
+    if method == None or method == 'ncg':
+        func = lambda x0: opt.fmin_ncg(mL, x0, fprime=mDL, fhess=mD2L,\
+                                       disp=disp, full_output=True)
+        xm = check_max(func, x, 5, 'NCG', disp)
+        if xm != None:
+            return xm
 
-    tot_catrating = 0
-    categories = []
-    for j in range(0,len(opps)):
-        if opps[j].cat not in categories:
-            categories.append(opps[j].cat)
-            tot_catrating += player.cat_rating[opps[j].cat]
+    if method == None or method == 'bfgs':
+        func = lambda x0: opt.fmin_bfgs(mL, x0, fprime=mDL,\
+                                        disp=disp, full_output=True)
+        xm = check_max(func, x, 6, 'BFGS', disp)
+        if xm != None:
+            return xm
 
-    N = len(categories)
-    categories.sort()
+    if method == None or method == 'powell':
+        func = lambda x0: opt.fmin_powell(mL, x0, disp=disp, full_output=True)
+        xm = check_max(func, x, 5, 'POWELL', disp)
+        if xm != None:
+            return xm
 
-    win_cat = [0] * N
-    loss_cat = [0] * N
-    for j in range(0,len(opps)):
-        win_cat[categories.index(opps[j].cat)] += W[j]
-        loss_cat[categories.index(opps[j].cat)] += L[j]
-    for c in categories:
-        if win_cat[c] == 0 or loss_cat[c] == 0:
-            ind = -1
-            gap = -1
-            for j in range(0,len(opps)):
-                if opps[j].cat != categories[c]:
-                    continue
-                temp = abs(player.rating - opps[j].rating + player.cat_rating[opps[j].cat]\
-                           - opps[j].cat_rating[player.cat])
-                if temp < gap or gap == -1:
-                    gap = temp
-                    ind = j
-            W[ind] += 1
-            L[ind] += 1
+    func = lambda x0: opt.fmin(mL, x0, disp=disp, full_output=True)
+    xm = check_max(func, x, 4, 'DOWNHILL_SIMPLEX', disp)
+    return xm
 
-    mu = zeros(len(opps))
-    s = zeros(len(opps))
-    q = zeros((len(opps), N))
-    p = zeros((len(opps), N+1))
-    q[:,0] = 1
-    p[:,0] = 1
-    for j in range(0,len(opps)):
-        opp = opps[j]
-        mu[j] = 2*(opp.rating + opp.cat_rating[player.cat])
-        s[j] = sqrt(1 + opp.dev**2 + opp.cat_dev[player.cat]**2)
-        if categories.index(opp.cat) < N - 1:
-            q[j,1+categories.index(opp.cat)] = 1
+def fix_ww(myr, oppr, oppc, W, L):
+    played_cats = sorted(unique(oppc))
+    wins = zeros(len(played_cats))
+    losses = zeros(len(played_cats))
+    M = len(W)
+
+    for j in range(0,M):
+        wins[played_cats.index(oppc[j])] += W[j]
+        losses[played_cats.index(oppc[j])] += L[j]
+    pi = nonzero(wins*losses == 0)[0]
+
+    for c in pi:
+        cat = played_cats[c]
+        inds = nonzero(oppc == cat)[0]
+        i = abs(oppr[inds]-myr).argmin()
+        W[inds[i]] += 1
+        L[inds[i]] += 1
+
+    return (W, L)
+
+def update(myr, mys, myc, oppr, opps, oppc, W, L, text=''):
+    if len(W) == 0:
+        news = sqrt(mys**2 + _var_decay**2)
+        return (myr,news)
+
+    (W, L) = fix_ww(myr[0], oppr[:,0], oppc, W, L)
+
+    played_cats = sorted(unique(oppc))
+    tot = sum(myr[array(played_cats)+1])
+    M = len(W)
+    C = len(played_cats)
+
+    def loc(x):
+        return array([played_cats.index(c) for c in x])
+
+    def glob(x):
+        return array([played_cats[c] for c in x])
+
+    def extend(x):
+        return hstack((x, tot-sum(x[1:])))
+
+    DM = zeros((M,C))
+    DMex = zeros((M,C+1))
+    DM[:,0] = 1
+    DMex[:,0] = 1
+    for j in range(0,M):
+        lc = loc([oppc[j]])[0]
+        if lc < C-1:
+            DM[j,lc+1] = 1
         else:
-            q[j,1:] = -1
-        p[j,1+categories.index(opp.cat)] = 1
+            DM[j,1:] = -1
+        DMex[j,lc+1] = 1
 
-    def make_cats(x):
-        cats = zeros(N)
-        if N > 1:
-            cats[:-1] = x[1:]
-            cats[-1] = tot_catrating - sum(x[1:])
-        else:
-            cats = [tot_catrating]
-        return cats
+    mbar = oppr[:,0] + oppr[:,myc+1]
+    sbar = sqrt(opps[:,0]**2 + opps[:,myc+1]**2 + 1)
+    gen_phi = lambda j, x: norm.pdf(x, loc=mbar[j], scale=sbar[j])
+    gen_Phi = lambda j, x: norm.cdf(x, loc=mbar[j], scale=sbar[j])
 
     def logL(x):
-        ret = 0
-        cats = make_cats(x)
-        for j in range(0,len(opps)):
-            t = x[0] + cats[categories.index(opps[j].cat)]
-            Phi = norm.cdf(t, loc=mu[j], scale=s[j])
-            ret += W[j]*log(Phi) + L[j]*log(1-Phi)
-        return -ret
+        Mv = x[0] + extend(x)[loc(oppc)+1]
+        Phi = array([gen_Phi(i,Mv[i]) for i in range(0,M)])
+        return sum(W*log(Phi) + L*(log(1-Phi)))
 
     def DlogL(x):
-        ret = zeros(N)
-        cats = make_cats(x)
-        for j in range(0,len(opps)):
-            t = x[0] + cats[categories.index(opps[j].cat)]
-            phi = norm.pdf(t, loc=mu[j], scale=s[j])
-            Phi = norm.cdf(t, loc=mu[j], scale=s[j])
-            ret += (W[j]/Phi - L[j]/(1-Phi))*phi * q[j,:]
-        return -ret
+        Mv = x[0] + extend(x)[loc(oppc)+1]
+        phi = array([gen_phi(i,Mv[i]) for i in range(0,M)])
+        Phi = array([gen_Phi(i,Mv[i]) for i in range(0,M)])
+        vec = (W/Phi - L/(1-Phi)) * phi
+        return array(vec*matrix(DM))[0]
 
-    def D2logL(x):
-        ret = zeros((N,N))
-        cats = make_cats(x)
-        for j in range(0,len(opps)):
-            t = x[0] + cats[categories.index(opps[j].cat)]
-            phi = norm.pdf(t, loc=mu[j], scale=s[j])
-            Phi = norm.cdf(t, loc=mu[j], scale=s[j])
-            val = -(W[j]/Phi**2 + L[j]/(1-Phi)**2) * phi**2
-            val -= (W[j]/Phi - L[j]/(1-Phi))*phi*(t-mu[j])/s[j]**2
-            ret += val * outer(q[j,:], q[j,:])
-        return -ret
+    def D2logL(x, DM, C):
+        Mv = x[0] + extend(x)[loc(oppc)+1]
+        phi = array([gen_phi(i,Mv[i]) for i in range(0,M)])
+        Phi = array([gen_Phi(i,Mv[i]) for i in range(0,M)])
+        alpha = phi/Phi
+        beta = phi/(1-Phi)
+        Mvbar = (Mv-mbar)/sbar**2
+        coeff = - W*alpha*(alpha+Mvbar) - L*beta*(beta-Mvbar)
+        ret = zeros((C,C))
+        for j in range(0,M):
+            ret += coeff[j] * outer(DM[j,:],DM[j,:])
+        return ret
 
-    def D2logLmod(x,cats):
-        ret = zeros((N+1,N+1))
-        for j in range(0,len(opps)):
-            t = x + cats[categories.index(opps[j].cat)]
-            phi = norm.pdf(t, loc=mu[j], scale=s[j])
-            Phi = norm.cdf(t, loc=mu[j], scale=s[j])
-            val = -(W[j]/Phi**2 + L[j]/(1-Phi)**2) * phi**2
-            val -= (W[j]/Phi - L[j]/(1-Phi))*phi*(t-mu[j])/s[j]**2
-            ret += val * outer(p[j,:], p[j,:])
-        return -ret
+    x = hstack((myr[0], myr[played_cats]))[0:-1]
+    x = maximize(logL, DlogL, lambda x: D2logL(x,DM,C), x)
 
-    x = zeros(N)
-    x[0] = player.rating
-    for c in range(0,len(categories)-1):
-        x[1+c] = player.cat_rating[categories[c]]
+    if x == None:
+        print(' > flicko.update: Failed to find maximum (' + text + ')')
+        return None
 
-    ret = opt.fmin_bfgs(logL, x, fprime=DlogL, full_output=True, disp=False)
-    if ret[6] > 0:
-        print('Unable to converge')
-        return False
-    x = ret[0]
+    devs = -1/diag(D2logL(x, DMex, C+1))
+    rats = extend(x)
+    news = zeros(len(myr))
+    newr = zeros(len(myr))
 
-    if N == 1:
-        x = [x]
+    ind = [0] + [f+1 for f in played_cats]
+    news[ind] = 1/sqrt(1/devs**2 + 1/mys[ind]**2)
+    newr[ind] = (rats/devs**2 + myr[ind]/mys[ind]**2) * news[ind]**2
 
-    gen_mod = x[0]
-    cat_mod = make_cats(x)
-    dev = sqrt(1/diag(D2logLmod(x[0], make_cats(x))))
-    gen_dev = dev[0]
-    cat_dev = dev[1:]
+    ind = [f+1 for f in played_cats]
+    if _project:
+        m = mean(newr[ind])
+        newr[ind] -= m
+        newr[0] += m
 
-    #print(gen_mod)
-    #print(gen_dev)
-    #print(cat_mod)
-    #print(cat_dev)
+    ind = setdiff1d(range(0,len(myr)), [0] + ind, assume_unique=True)
+    news[ind] = sqrt(mys[ind]**2 + _var_decay**2)
+    newr[ind] = myr[ind]
 
-    player.new_dev = sqrt(1/(1/player.dev**2 + 1/gen_dev**2))
-    player.new_rating = (player.rating/player.dev**2 + gen_mod/gen_dev**2) *\
-            player.new_dev**2
+    news = (abs(news-_min_dev)+news-_min_dev)/2 + _min_dev
 
-    player.new_cat_dev = [0] * len(player.cat_dev)
-    player.new_cat_rating = [0] * len(player.cat_rating)
-    for c in range(0,len(player.cat_dev)):
-        if c in categories:
-            i = categories.index(c)
-            player.new_cat_dev[c] = sqrt(1/(1/player.cat_dev[c]**2 +\
-                                            1/cat_dev[i]**2))
-            player.new_cat_rating[c] = (player.cat_rating[c]/player.cat_dev[c]**2 +\
-                    cat_mod[c]/cat_dev[c]**2) * player.new_cat_dev[c]**2
-        else:
-            player.new_cat_dev[c] = new_dev(player.cat_dev[i])
-            player.new_cat_rating[c] = player.cat_rating[c]
+    return (newr, news)
 
-    m = mean(player.new_cat_rating)
-    player.new_cat_rating -= m
+if __name__ == '__main__':
+    myc = 0
+    myr = array([0,0,0,0])
+    mys = array([1,1,1,1])
 
-p = Player()
-p.rating = 0
-p.cat_rating = [0, 0, 0]
-p.dev = 1
-p.cat_dev = [1, 1, 1]
-p.cat = 0
+    oppc = array([0,2,0,2])
+    oppr = array([[1,0,0,0],\
+                  [0,0,0,0],\
+                  [0,0,0,0],\
+                  [0,0,0,0]])
+    opps = array([[1,1,1,1],\
+                  [1,1,1,1],\
+                  [1,1,1,1],\
+                  [1,1,1,1]])
 
-opps = []
+    W = array([4,4,4,4])
+    L = array([0,4,0,4])
 
-q = Player()
-q.rating = 0
-q.cat_rating = [0, 0, 0]
-q.dev = 1
-q.cat_dev = [1, 1, 1]
-q.cat = 0
-opps += [q]
+    #t = time.clock()
+    #for i in range(0,500):
+        #update(myr, mys, myc, oppr, opps, oppc, W, L)
+    #t = time.clock() - t
+    #print('{t:.2f} seconds'.format(t=t))
 
-q = Player()
-q.rating = 0
-q.cat_rating = [0, 0, 0]
-q.dev = 1
-q.cat_dev = [1, 1, 1]
-q.cat = 1
-opps += [q]
-
-#q = Player()
-#q.rating = 0
-#q.cat_rating = [0, 0, 0]
-#q.dev = 1
-#q.cat_dev = [1, 1, 1]
-#q.cat = 2
-#opps += [q]
-
-t = time.clock()
-for i in range(0,1):
-    update(p, opps, [1, 1, 3], [0, 1, 3])
-t = time.clock() - t
-#print('{t:.2f}'.format(t=t))
-
-print(p.new_rating)
-print(p.new_cat_rating)
-print(p.new_dev)
-print(p.new_cat_dev)
+    update(myr, mys, myc, oppr, opps, oppc, W, L)
