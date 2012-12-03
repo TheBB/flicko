@@ -1,0 +1,170 @@
+\documentclass[a4paper, twoside, notitlepage, 11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{subfigure}
+\usepackage{multirow}
+\usepackage{color}
+\usepackage{lmodern}
+
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{amsthm}
+\usepackage{amscd}
+\usepackage{bbm}
+\usepackage{bm}
+
+\usepackage{algorithmic}
+\usepackage{algorithm}
+
+\usepackage{hyperref}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\Z}{\mathbb{Z}} 
+\newcommand{\T}{\mathbb{T}}
+\newcommand{\dd}{\,\mathrm{d}} 
+
+\begin{document}
+
+\section{Derivation of method}
+
+The derivation follows largely the program given in \cite{Glickman99}.
+
+For our model, each player $i$ is assigned a category
+$c(i)\in\left\{1,\ldots,C\right\}$ and a skill vector
+$$
+    \Theta^{(k)}_i = \left(\zeta^{(k)}_i, \eta^{(k),1}_i, \ldots,
+    \eta^{(k),C}_i\right)
+$$
+at each period $k$. The superscript $(k)$ will mostly be suppressed in the
+following.
+
+Each element is assumed normally distributed with a given mean and variance,
+independent from each other:
+$$
+    \zeta_i \sim N(\zeta_i|\mu(\zeta_i),\sigma(\zeta_i)^2), \qquad
+    \eta^c_i \sim N(\eta^c_i|\mu(\eta^c_i),\sigma(\eta^c_i)^2).
+$$
+The interpretation being that a player players with strength $\zeta+\eta^c$
+against another player of category $c$. Thus, $\zeta$ is a general indicator of
+skill, and $\eta^c$ is a category modifier. We will assume the normalization
+$$
+    \sum_c \eta^c = 0.
+$$
+
+The rating model we use differs from the one in \cite{Glickman99} in that we
+use a normal distribution rather than a logistic. Thus, when two players $i$
+and $j$ play, we have an outcome $s$ with probability distribution
+$$
+    P(s=1) = \Phi(\Delta_{i,j}), \qquad P(s=-1) = \Phi(-\Delta_{i,j}),
+$$
+where $\Phi$ is the cumulative standard normal distribution function, and
+$$
+    \Delta_{i,j} = \zeta_i - \zeta_j + \eta^{c(j)}_i - \eta^{c(i)}_j
+$$
+is the difference of the playing strengths.
+
+Assume now that a player with prior playing strength $\Theta$ and category $c$
+plays a set of games against various opponents, with the result of game $k$
+against opponent $j$ denoted as $s_{j,k}\in\left\{-1,1\right\}$. As given in
+\cite{Glickman99}, we approximate the posterior likelihood of $\Theta$ as
+$$
+    f(\Theta|s) \propto \vec{\varphi}(\Theta|\vec{\mu},\vec{\sigma}^2)\prod_{j,k}
+    \int\Phi(s_{j,k}\Delta_j)\vec{\varphi}(\Theta_j|\vec{\mu}_j,\vec{\sigma}_j^2)
+    \dd\Theta_j = \vec{\varphi}(\Theta|\vec{\mu},\vec{\sigma}^2)\prod_{j,k}
+    I_{j,k},
+$$
+where $\vec{\varphi}$ denotes the distribution functions of $\Theta$,
+$\Theta_j$ (which is a product of the normal distributions of each element),
+$\Delta_j = \zeta-\zeta_j + \eta^{c(j)}-\eta^c_j$ is the strength gap, and each
+integral runs over $\R^{C+1}$.
+
+We will now evaluate the integrals $I_{j,k}$.
+
+First, we note that the integrand in each of the variables $\eta_j^d$ for
+$d\neq c$ is just a normal distribution, thus we can integrate them away to get
+$$
+    I_{j,k} = \int_\R\int_\R\int_{-\infty}^{s_{j,k}\Delta_j}
+    \varphi(\alpha|0,1)\varphi(\zeta_j|\mu(\zeta_j),\sigma(\zeta_j)^2)
+    \varphi(\eta^c_j|\mu(\eta^c_j),\sigma(\eta^c_j)^2) 
+    \dd\alpha\dd\zeta_j\dd\eta^c_j.
+$$
+This integral can be evaluated in a CAS (Computer Algebra System) such as SAGE,
+and we find
+$$
+    I_{j,k} \propto \begin{cases}
+    \Phi(\zeta+\eta^{c(j)}|\overline{\mu}_j,\overline{\sigma}_j^2)),&s_{j,k}=1,\\
+    1-\Phi(\zeta+\eta^{c(j)}|\overline{\mu}_j,\overline{\sigma}_j^2)),&s_{j,k}=-1,
+    \end{cases}
+$$
+with the modified means and variances
+$$
+    \overline{\mu}_j = \mu(\zeta_j) + \mu(\eta^c_j),\qquad
+    \overline{\sigma}_j^2 = 1 + \sigma(\zeta_j)^2 + \sigma(\eta^c_j)^2.
+$$
+Now, to simplify notation, assume that there are in total $W_j$ wins and $L_j$
+losses against player $j$. We then find
+\begin{equation} \label{f}
+    f(\Theta|s) \propto \vec{\varphi}(\Theta|\vec{\mu},\vec{\sigma}^2)\prod_j
+    \Phi_j(M_j)^{W_j}\left(1-\Phi_j(M_j)\right)^{L_j},
+\end{equation}
+where $M_j=\zeta+\eta^{c(j)}$.
+
+As in \cite{Glickman99}, we now aim to approximate the product in \eqref{f}
+with a normal distribution in each variable. To this end, we take the
+logarithm, and rely on numerical optimization methods to find the maximum
+$\hat{\Theta}$. The gradient and Hessian is available, and it is our experience
+that this optimization is generally quite quick. We have used the NCG
+algorithm, but other, such as BFGS, Powell's iteration and a simple downhill
+simplex method work as well.
+
+Thus, the product in \eqref{f} is approximated by a normal distribution with
+mean $\hat{\Theta}$ and variances $\hat{\sigma}^2$ given by the negative
+reciprocals of the diagonal elements in the Hessian evaluated at
+$\hat{\Theta}$.
+
+The ratings are then updated exactly as in \cite{Glickman99}, namely
+$$
+    (\vec{\sigma}^2)' = \left(\frac{1}{\hat{\sigma}^2} +
+    \frac{1}{\vec{\sigma}^2}\right)^{-1}
+$$
+and
+$$
+\vec{\mu}' = (\vec{\sigma}^2)'\left(\frac{\hat{\Theta}}{\hat{\sigma}^2} +
+    \frac{\vec{\mu}}{\vec{\sigma}^2}\right)
+$$
+where all algebraic operations are understood to be element-wise.
+
+\section{Notes}
+\begin{enumerate}
+\item To keep the optimization well-defined, the normalization condition for
+    all $\eta^c$ must be enforced.
+\item Even so, it is not guaranteed that in the updated mean, this condition
+    remains true. Thus, after the update, we subtract the mean of the $\eta^c$
+    from each $\eta^c$, and add it to the general rating $\zeta$. This does not
+    change the playing strengths.
+\item If a player does not play during a period, his or her variance is updated
+    according to the formula given in \cite{Glickman99}. This also applies to
+    category-specific rating variances $\sigma(\eta^d)^2$ if a player does not
+    play any games against a player of category $d$.
+\item To prevent ratings from becoming stale, a rating variance floor should be
+    enforced. Thus, after updating the ratings
+    $$
+        \vec{\sigma}' \leftarrow \max(\vec{\sigma}', \sigma_\mathrm{floor}).
+    $$
+\end{enumerate}
+
+\section{Parameters}
+The system should be fitted in each instance with the parameters:
+\begin{itemize}
+    \item The rating variance floor $\sigma_\mathrm{floor}$.
+    \item The initial rating variances $\sigma_\mathrm{init}$ for new players.
+    \item The period length.
+\end{itemize}
+
+\bibliographystyle{plain}
+\bibliography{method}
+
+\end{document}
