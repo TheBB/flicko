@@ -94,6 +94,7 @@ if len(players) > 0:
 
         p = players[id]
         R = update(p.r, p.s, p.c, p.oppr, p.opps, p.oppc, p.W, p.L, str(p.id))
+
         if R == None:
             p.newr = p.r
             p.news = p.s
@@ -149,9 +150,13 @@ for id in players:
 res = cur.execute('SELECT start, end FROM periods WHERE rowid=:period',\
                   {'period': period+1})
 res = next(res)
-print('Period ' + str(period+1) + ': ' + res[0] + ' to ' + res[1])
-print(str(nrepeats) + ' returning and ' + str(nnew) + ' new players played ' +\
-      str(nmatches) + ' matches.')
+
+t = 'Period ' + str(period+1) + ': ' + res[0] + ' to ' + res[1]
+print(t)
+a = str(nrepeats) + ' returning and ' + str(nnew) + ' new players played ' +\
+        str(nmatches) + ' matches.'
+print(a)
+t += '\n' + a + '\n'
 
 top = []
 bottom = []
@@ -160,15 +165,16 @@ res = cur.execute('''SELECT p.name, r.rating FROM players as p, ratings as r
                   DESC LIMIT 10''', {'period': period})
 for r in res:
     top.append((r[0], r[1]))
-res = cur.execute('''SELECT p.name, r.rating FROM players as p, ratings as r
-                  WHERE p.rowid=r.player AND r.period=:period ORDER BY r.rating
-                  ASC LIMIT 10''', {'period': period})
-for r in res:
-    bottom.append((r[0], r[1]))
 
-print('')
 for i in range(0,10):
-    print('{n:>2}. {name: <15} '.format(n=i+1, name=top[i][0]), end='')
-    print('{r:<2.4f}'.format(r=top[i][1]))
+    a = '{n:>2}. {name: <15} '.format(n=i+1, name=top[i][0])
+    t += '\n' + a
+
+    a = '{r:<2.4f}'.format(r=top[i][1])
+    t += a
+
+t += '\n\n'
+with open('pres','a') as f:
+    f.write(t)
 
 db.commit()

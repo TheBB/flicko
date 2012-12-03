@@ -71,17 +71,34 @@ def fix_ww(myr, oppr, oppc, W, L):
 
     return (W, L)
 
-def update(myr, mys, myc, oppr, opps, oppc, W, L, text=''):
+def update(myr, mys, myc, oppr, opps, oppc, W, L, text='', pr=False):
+    if pr:
+        print('Updating')
+        print('myr: ' + str(myr))
+        print('mys: ' + str(mys))
+        print('oppr:')
+        print(oppr)
+        print('opps:')
+        print(opps)
+        print('oppc: ' + str(oppc))
+
     if len(W) == 0:
         news = sqrt(mys**2 + _var_decay**2)
         return (myr,news)
 
     (W, L) = fix_ww(myr[0], oppr[:,0], oppc, W, L)
 
+    if pr:
+        print('W: ' + str(W))
+        print('L: ' + str(L))
+
     played_cats = sorted(unique(oppc))
     tot = sum(myr[array(played_cats)+1])
     M = len(W)
     C = len(played_cats)
+
+    if pr:
+        print('tot: ' + str(tot))
 
     def loc(x):
         return array([played_cats.index(c) for c in x])
@@ -141,10 +158,16 @@ def update(myr, mys, myc, oppr, opps, oppc, W, L, text=''):
         print(' > flicko.update: Failed to find maximum (' + text + ')')
         return None
 
+    if pr:
+        print('conv: ' + str(x))
+
     devs = -1/diag(D2logL(x, DMex, C+1))
     rats = extend(x)
     news = zeros(len(myr))
     newr = zeros(len(myr))
+
+    if pr:
+        print('exconv: ' + str(rats))
 
     ind = [0] + [f+1 for f in played_cats]
     news[ind] = 1/sqrt(1/devs**2 + 1/mys[ind]**2)
@@ -152,7 +175,9 @@ def update(myr, mys, myc, oppr, opps, oppc, W, L, text=''):
 
     ind = [f+1 for f in played_cats]
     if _project:
-        m = mean(newr[ind])
+        m = (sum(newr[ind]) - tot)/len(ind)
+        if pr:
+            print('mod: ' + str(m))
         newr[ind] -= m
         newr[0] += m
 
@@ -162,15 +187,23 @@ def update(myr, mys, myc, oppr, opps, oppc, W, L, text=''):
 
     news = (abs(news-_min_dev)+news-_min_dev)/2 + _min_dev
 
+    m = mean(newr[1:])
+    newr[1:] -= m
+    newr[0] += m
+
+    if pr:
+        print('newr: ' + str(newr))
+        print('news: ' + str(newr))
+
     return (newr, news)
 
 if __name__ == '__main__':
     myc = 0
-    myr = array([0,0,0,0])
+    myr = array([0,0,0,1])
     mys = array([1,1,1,1])
 
-    oppc = array([0,2,0,2])
-    oppr = array([[1,0,0,0],\
+    oppc = array([2,2,2,2])
+    oppr = array([[0,0,0,0],\
                   [0,0,0,0],\
                   [0,0,0,0],\
                   [0,0,0,0]])
