@@ -3,10 +3,11 @@
 import sqlite3
 from scipy.stats import norm
 import numpy
-from math import floor
+from math import floor, sqrt
 import pylab
+import params
 
-nsl = 30
+nsl = 15
 
 class Match:
     pass
@@ -23,7 +24,7 @@ res = cur.execute('''SELECT p1.name, p2.name, p1.race, p2.race, m.sa, m.sb,
                   players AS p1, players AS p2 
                   WHERE r1.player=m.pa AND r2.player=m.pb AND
                   r1.period=m.period-1 AND r2.period=m.period-1 AND
-                  p1.rowid=m.pa AND p2.rowid=m.pb''')
+                  p1.rowid=m.pa AND p2.rowid=m.pb AND m.period>=0''')
 
 matches = []
 for r in res:
@@ -37,8 +38,10 @@ for r in res:
     m.pbrace = ['P','T','Z'].index(r[3])
     m.pascore = r[4]
     m.pbscore = r[5]
-    m.parating = r[6] + r[7+m.parace]
-    m.pbrating = r[14] + r[15+m.pbrace]
+    m.parating = r[6] + r[7+m.pbrace]
+    m.pbrating = r[14] + r[15+m.parace]
+    m.padev = r[10]**2 + r[11+m.pbrace]**2
+    m.pbdev = r[18]**2 + r[19+m.parace]**2
     matches.append(m)
 
 cur.close()
@@ -48,7 +51,8 @@ table_l = [0]*nsl
 games = 0
 
 for m in matches:
-    prob = norm.cdf((m.parating-m.pbrating))
+    #prob = norm.cdf(m.parating-m.pbrating, scale=sqrt(1+m.padev+m.pbdev))
+    prob = norm.cdf(1.00*(m.parating-m.pbrating), scale=1)
     act = float(m.pascore) / float(m.pascore + m.pbscore)
 
     if prob < 0.5:
@@ -71,6 +75,8 @@ for m in matches:
                        s=S)
         print(q)
 
+table_g = [float(table_w[i]+table_l[i]) for i in range(0,len(table_w))\
+           if table_w[i] > 0 and table_l[i] > 0]
 zones = []
 fracs = []
 slw = float(50)/nsl
@@ -80,18 +86,32 @@ for i in range(0,nsl):
 
     zones.append(50.0+slw*(i+0.5))
     fracs.append(float(table_w[i]) / float(table_w[i] + table_l[i]))
-    #print('{zone:5.2f}%: {frac:6.2f}%'.format(zone=zones[-1], frac=100*fracs[-1]))
+    print('{zone:5.2f}%: {frac:6.2f}% ({n})'.format(zone=zones[-1],\
+                                                    frac=100*fracs[-1],\
+                                                    n=table_g[i]))
 
-a = numpy.polyfit(zones,[100*f for f in fracs],1)
+I = 0
+while I < len(table_g) and table_g[I] > 0:
+    I += 1
+M = max(table_g)
 
+a = numpy.polynomial.polynomial.polyfit(zones[0:I],[100*f for f in fracs][0:I]\
+                                        ,1,w=table_g[0:I])
 p1, = pylab.plot(zones, [100*f for f in fracs], '#000000', marker='o', linewidth=2)
 p2, = pylab.plot(zones, zones, '#ff0000', linestyle='--')
-p3, = pylab.plot([zones[0],zones[-1]], [a[1]+a[0]*zones[0],a[1]+a[0]*zones[-1]],\
+p3, = pylab.plot([zones[0],zones[-1]], [a[0]+a[1]*zones[0],a[0]+a[1]*zones[-1]],\
                  '#0000ff', linestyle='--')
 pylab.axis([50,80,50,80])
 pylab.grid()
 pylab.xlabel('Predicted winrate')
 pylab.ylabel('Actual winrate')
-pylab.title('Actual vs. predicted winrate (' + str(games) + ' games)')
-pylab.legend([p2,p3], ['ideal','fitted'])
+
+ax = pylab.twinx()
+ax.set_ylabel('Games')
+p4, = ax.plot(zones, table_g, '#000000', linestyle='--')
+
+pylab.legend([p2,p3,p4], ['ideal','fitted','games'], loc=8)
+pylab.title('decay=%.2f init=%.2f floor=%.2f period=%i' % (params.var_decay,\
+           params.init_dev, params.min_dev, params.per_length))
+
 pylab.show()

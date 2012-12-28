@@ -3,9 +3,10 @@
 import atexit
 import sqlite3
 import sys
+from numpy import *
 
 from flicko import *
-from numpy import *
+import params
 import progressbar
 
 class Player:
@@ -15,11 +16,6 @@ if len(sys.argv) > 1:
     period = int(sys.argv[1])
 else:
     period = 0
-
-if len(sys.argv) > 2:
-    initdev = float(sys.argv[2])
-else:
-    initdev = 0.3
 
 db = sqlite3.connect('data.sql')
 cur = db.cursor()
@@ -51,10 +47,12 @@ for id in players:
         rat = next(ratres)
         p.r = array(rat[2:6])
         p.s = array(rat[6:10])
+        (k, news) = update([], p.s, [], [], [], [], [], [], str(p.id))
+        p.s = news
         nrepeats += 1
     except:
         p.r = zeros(4)
-        p.s = initdev * ones(4)
+        p.s = params.init_dev * ones(4)
         nnew += 1
 
 res = cur.execute('''SELECT * FROM matches WHERE period=:per''', {'per': period})
@@ -110,8 +108,6 @@ num = next(cur.execute('''SELECT count(*) FROM players, ratings WHERE
                        players.rowid=ratings.player AND
                        ratings.period=:per''', {'per': period-1}))[0]
 if num > 0:
-    progress = progressbar.ProgressBar(num, exp='Decaying ratings')
-    n = 0
     res = cur.execute('''SELECT * FROM ratings WHERE period=:per''',\
                       {'per': period-1})
     storeres = []
@@ -119,10 +115,6 @@ if num > 0:
         storeres.append(r)
 
     for r in storeres:
-        progress.update_time(n)
-        n += 1
-        print(progress.dyn_str())
-
         if r[0] in players.keys():
             continue
 
@@ -133,10 +125,6 @@ if num > 0:
                     {'id': r[0], 'per': period, 'r': r[2], 'rp': r[3],\
                      'rt': r[4], 'rz': r[5], 'd': news[0], 'dp': news[1],\
                      'dt': news[2], 'dz': news[3]})
-
-    progress.update_time(num)
-    print(progress.dyn_str())
-    print('')
 
 for id in players:
     p = players[id]

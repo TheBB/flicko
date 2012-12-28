@@ -15,3 +15,5 @@ cur.close()
 
 for i in range(low,high):
     subprocess.call(['./period.py', str(i)])
+
+subprocess.call(['./plot.py'])

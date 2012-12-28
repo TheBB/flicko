@@ -6,8 +6,10 @@ from numpy import *
 from scipy.stats import norm
 import scipy.optimize as opt
 
-_var_decay = 0.
-_min_dev = 0.1
+import params
+
+_var_decay = params.var_decay
+_min_dev = params.min_dev
 _project = True
 
 def check_max(func, x, i, name, disp):
@@ -29,29 +31,32 @@ def maximize(L, DL, D2L, x, method=None, disp=False):
 
     if method == None or method == 'ncg':
         func = lambda x0: opt.fmin_ncg(mL, x0, fprime=mDL, fhess=mD2L,\
-                                       disp=disp, full_output=True)
+                                       disp=disp, full_output=True,\
+                                       avextol=1e-10)
         xm = check_max(func, x, 5, 'NCG', disp)
         if xm != None:
             return xm
 
     if method == None or method == 'bfgs':
         func = lambda x0: opt.fmin_bfgs(mL, x0, fprime=mDL,\
-                                        disp=disp, full_output=True)
+                                        disp=disp, full_output=True,\
+                                        gtol=1e-10)
         xm = check_max(func, x, 6, 'BFGS', disp)
         if xm != None:
             return xm
 
     if method == None or method == 'powell':
-        func = lambda x0: opt.fmin_powell(mL, x0, disp=disp, full_output=True)
+        func = lambda x0: opt.fmin_powell(mL, x0, disp=disp, full_output=True,\
+                                          ftol=1e-10)
         xm = check_max(func, x, 5, 'POWELL', disp)
         if xm != None:
             return xm
 
-    func = lambda x0: opt.fmin(mL, x0, disp=disp, full_output=True)
+    func = lambda x0: opt.fmin(mL, x0, disp=disp, full_output=True, ftol=1e-10)
     xm = check_max(func, x, 4, 'DOWNHILL_SIMPLEX', disp)
     return xm
 
-def fix_ww(myr, oppr, oppc, W, L):
+def fix_ww(myr, mys, myc, oppr, opps, oppc, W, L):
     played_cats = sorted(unique(oppc))
     wins = zeros(len(played_cats))
     losses = zeros(len(played_cats))
@@ -63,13 +68,13 @@ def fix_ww(myr, oppr, oppc, W, L):
     pi = nonzero(wins*losses == 0)[0]
 
     for c in pi:
-        cat = played_cats[c]
-        inds = nonzero(oppc == cat)[0]
-        i = abs(oppr[inds]-myr).argmin()
-        W[inds[i]] += 1
-        L[inds[i]] += 1
+        W = append(W, 1)
+        L = append(L, 1)
+        oppr = append(oppr, [myr], 0)
+        opps = append(opps, [mys], 0)
+        oppc = append(oppc, played_cats[c])
 
-    return (W, L)
+    return (oppr, opps, oppc, W, L)
 
 def update(myr, mys, myc, oppr, opps, oppc, W, L, text='', pr=False):
     if pr:
@@ -86,7 +91,7 @@ def update(myr, mys, myc, oppr, opps, oppc, W, L, text='', pr=False):
         news = sqrt(mys**2 + _var_decay**2)
         return (myr,news)
 
-    (W, L) = fix_ww(myr[0], oppr[:,0], oppc, W, L)
+    (oppr, opps, oppc, W, L) = fix_ww(myr, mys, myc, oppr, opps, oppc, W, L)
 
     if pr:
         print('W: ' + str(W))

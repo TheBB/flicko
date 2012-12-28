@@ -6,10 +6,7 @@ import atexit
 import subprocess
 import sqlite3
 
-if len(sys.argv) > 1:
-    per_length = int(sys.argv[1])
-else:
-    per_length = 14
+import params
 
 subprocess.call(['cp', 'data_pristine.sql', 'data.sql'])
 db = sqlite3.connect('data.sql')
@@ -24,15 +21,15 @@ start = next(cur.execute('''SELECT julianday(date) FROM matches
                          ORDER BY date ASC LIMIT 1'''))[0]
 end = next(cur.execute('''SELECT julianday(date) FROM matches ORDER BY date
                        DESC LIMIT 1'''))[0]
-nperiods = ceil((end-start)/per_length)
+nperiods = ceil((end-start)/params.per_length)
 
 for period in range(0,nperiods):
     cur.execute('''UPDATE matches SET period=:per WHERE 
                 julianday(date)>=:pstart AND julianday(date)<:pend''',
-                {'per': period, 'pstart': start, 'pend': start+per_length})
+                {'per': period, 'pstart': start, 'pend': start+params.per_length})
     cur.execute('''INSERT INTO periods VALUES (date(:start), date(:end-1))''',\
-                {'start': start, 'end': start+per_length})
-    start += per_length
+                {'start': start, 'end': start+params.per_length})
+    start += params.per_length
 db.commit()
 
 cur.execute('''CREATE TABLE ratings (player integer, period integer, rating
